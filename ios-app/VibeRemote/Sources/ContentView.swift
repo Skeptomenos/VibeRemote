@@ -7,6 +7,7 @@ struct ContentView: View {
     @State private var selectedSession: AgentSession?
     @State private var showingNewSessionSheet = false
     @State private var showingSettings = false
+    @State private var sessionToEdit: AgentSession?
     
     var body: some View {
         NavigationSplitView {
@@ -14,11 +15,16 @@ struct ContentView: View {
                 sessions: sessions,
                 selectedSession: $selectedSession,
                 onNewSession: { showingNewSessionSheet = true },
-                onSettings: { showingSettings = true }
+                onSettings: { showingSettings = true },
+                onEditSession: { session in
+                    sessionToEdit = session
+                }
             )
         } detail: {
             if let session = selectedSession {
-                TerminalContainerView(session: session)
+                TerminalContainerView(session: session, onSessionKilled: {
+                    selectedSession = nil
+                })
             } else {
                 EmptyStateView()
             }
@@ -32,11 +38,13 @@ struct ContentView: View {
         .sheet(isPresented: $showingSettings) {
             SettingsView()
         }
-        // DEBUG: Auto-select first session for testing
-        .onAppear {
-            if selectedSession == nil, let first = sessions.first {
-                selectedSession = first
-            }
+        .sheet(item: $sessionToEdit) { session in
+            EditSessionView(session: session, onDelete: {
+                if selectedSession?.id == session.id {
+                    selectedSession = nil
+                }
+                sessionToEdit = nil
+            })
         }
     }
 }

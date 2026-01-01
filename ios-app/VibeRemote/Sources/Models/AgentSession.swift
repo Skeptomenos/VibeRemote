@@ -9,20 +9,22 @@ final class AgentSession {
     var agentType: AgentType
     var lastActive: Date
     var isPinned: Bool
+    var opencodeSessionId: String?
+    var opencodeSessionTitle: String?
     
-    init(name: String, projectPath: String, agentType: AgentType = .opencode) {
+    init(name: String, projectPath: String, agentType: AgentType = .opencode, opencodeSessionId: String? = nil, opencodeSessionTitle: String? = nil) {
         self.id = UUID()
         self.name = name
         self.projectPath = projectPath
         self.agentType = agentType
         self.lastActive = Date()
         self.isPinned = false
+        self.opencodeSessionId = opencodeSessionId
+        self.opencodeSessionTitle = opencodeSessionTitle
     }
     
     var tmuxSessionName: String {
-        name.lowercased()
-            .replacingOccurrences(of: " ", with: "-")
-            .filter { $0.isLetter || $0.isNumber || $0 == "-" || $0 == "_" }
+        "vibe-\(id.uuidString.prefix(8).lowercased())"
     }
 }
 

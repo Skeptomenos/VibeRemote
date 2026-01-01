@@ -36,9 +36,13 @@ SESSION="${1:?Error: SESSION_NAME required}"
 PROJECT_PATH="${2:?Error: PROJECT_PATH required}"
 AGENT="${3:?Error: AGENT_TYPE required (opencode|claude|shell)}"
 ACTION="${4:-start}"
+OPENCODE_SESSION_ID="${5:-}"
 
-# Sanitize session name for tmux (replace spaces with dashes)
 SESSION=$(echo "$SESSION" | tr ' ' '-' | tr -cd '[:alnum:]-_')
+
+if [ -n "$OPENCODE_SESSION_ID" ]; then
+    OPENCODE_SESSION_ID=$(echo "$OPENCODE_SESSION_ID" | tr -cd '[:alnum:]-_')
+fi
 
 # ============================================================================
 # Helper Functions
@@ -48,9 +52,15 @@ log() {
 }
 
 get_agent_command() {
+    local expanded_path="${PROJECT_PATH/#\~/$HOME}"
+    
     case "$AGENT" in
         opencode)
-            echo "opencode"
+            if [ -n "$OPENCODE_SESSION_ID" ]; then
+                echo "~/.opencode/bin/opencode -s '$OPENCODE_SESSION_ID' '$expanded_path'"
+            else
+                echo "~/.opencode/bin/opencode '$expanded_path'"
+            fi
             ;;
         claude)
             echo "claude"
@@ -108,17 +118,20 @@ action_update() {
 }
 
 action_start() {
-    # Ensure project directory exists
-    mkdir -p "$PROJECT_PATH"
+    local expanded_path="${PROJECT_PATH/#\~/$HOME}"
+    mkdir -p "$expanded_path"
     
-    # Check if session already exists
     if tmux has-session -t "$SESSION" 2>/dev/null; then
-        log "Session '$SESSION' already exists. Ready to attach."
+        current_path=$(tmux display-message -t "$SESSION" -p '#{pane_current_path}')
+        if [ "$current_path" != "$expanded_path" ]; then
+            log "Session '$SESSION' exists but in wrong directory. Sending cd command..."
+            tmux send-keys -t "$SESSION" "cd '$expanded_path'" C-m
+        fi
+        log "Session '$SESSION' ready to attach."
         echo "READY"
         exit 0
     fi
     
-    # Get the command to run
     CMD=$(get_agent_command)
     
     # --- GAP 4 FIX: Keep-Alive Wrapper ---
@@ -141,8 +154,7 @@ action_start() {
         read
     done"
     
-    # Create the tmux session
-    tmux new-session -d -s "$SESSION" -c "$PROJECT_PATH"
+    tmux new-session -d -s "$SESSION" -c "$expanded_path"
     
     # Send the safe command to the session
     tmux send-keys -t "$SESSION" "$SAFE_CMD" C-m

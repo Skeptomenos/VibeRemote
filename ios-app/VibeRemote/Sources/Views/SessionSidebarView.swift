@@ -6,6 +6,7 @@ struct SessionSidebarView: View {
     @Binding var selectedSession: AgentSession?
     let onNewSession: () -> Void
     let onSettings: () -> Void
+    let onEditSession: (AgentSession) -> Void
     
     var body: some View {
         List(selection: $selectedSession) {
@@ -13,8 +14,18 @@ struct SessionSidebarView: View {
                 ForEach(sessions) { session in
                     SessionRowView(session: session)
                         .tag(session)
+                        .contextMenu {
+                            Button("Edit", systemImage: "pencil") {
+                                onEditSession(session)
+                            }
+                        }
+                        .swipeActions(edge: .trailing) {
+                            Button("Edit") {
+                                onEditSession(session)
+                            }
+                            .tint(.blue)
+                        }
                 }
-                .onDelete(perform: deleteSessions)
             }
         }
         .navigationTitle("VibeRemote")
@@ -30,9 +41,6 @@ struct SessionSidebarView: View {
                 }
             }
         }
-    }
-    
-    private func deleteSessions(at offsets: IndexSet) {
     }
 }
 

@@ -6,18 +6,46 @@ A native iOS/iPadOS app for remotely controlling AI coding agent sessions (OpenC
 ![Swift](https://img.shields.io/badge/Swift-5.9-orange)
 ![License](https://img.shields.io/badge/License-MIT-green)
 
+## Mission
+
+VibeRemote aims to create a **seamless vibe-coding experience on mobile** that feels like software-as-a-service, but is actually **bring your own infrastructure** and **bring your own API keys**.
+
+No vendor lock-in. No cloud dependencies. Your server, your keys, your data. Just a beautiful native app that connects to your existing setup and gets out of your way.
+
 ## Overview
 
 VibeRemote provides a full terminal interface on your iPhone or iPad to interact with AI coding agents running on a remote server. Connect to your development server via SSH, manage multiple agent sessions, and code from anywhere.
 
-### Key Features
+## Features
 
+### Core
 - **Native Terminal Experience** - Full terminal emulation using SwiftTerm with colors, escape sequences, and proper rendering
 - **SSH Key Authentication** - Secure Ed25519 key-based authentication (no passwords)
-- **Multiple Sessions** - Manage multiple agent sessions across different projects
-- **Agent Types** - Support for OpenCode, Claude Code, or plain shell sessions
-- **Session Persistence** - Sessions run in tmux on the server, persist across app restarts
-- **iPad Split View** - Optimized UI for both iPhone and iPad
+- **Session Persistence** - Sessions run in tmux on the server, persist across app restarts and network changes
+- **Multiple Agent Types** - Support for OpenCode, Claude Code, or plain shell sessions
+
+### Session Management
+- **Multiple Sessions** - Run multiple agent sessions across different projects simultaneously
+- **UUID-Based Session Binding** - Permanent 1:1 mapping between app connections and tmux sessions (survives renames)
+- **Folder Browser** - Browse and select project folders on your server via SSH
+- **OpenCode Session Picker** - List, resume, or start new OpenCode sessions with human-readable titles
+- **Edit Sessions** - Rename connections, change folders, switch OpenCode sessions
+- **Auto-Refresh Titles** - Session titles automatically sync from server when viewing
+
+### Server Administration
+- **Tmux Admin Panel** - View all tmux sessions running on your server
+- **Orphan Detection** - Identify sessions not linked to any app connection
+- **Bulk Cleanup** - Kill individual or all orphaned tmux sessions
+
+### Security
+- **Keychain Storage** - SSH keys stored securely in iOS Keychain
+- **Input Sanitization** - All shell commands sanitized to prevent injection
+- **Thread Safety** - Proper MainActor handling for all UI state updates
+
+### User Interface
+- **iPad Split View** - Optimized sidebar + terminal layout for iPad
+- **iPhone Support** - Full functionality on iPhone with navigation-based UI
+- **Dark Mode** - Native dark mode support
 
 ## Architecture
 
@@ -35,6 +63,23 @@ VibeRemote provides a full terminal interface on your iPhone or iPad to interact
 │  │ SSH Client│  │                       │  │  /claude  │  │
 │  └───────────┘  │                       │  └───────────┘  │
 └─────────────────┘                       └─────────────────┘
+```
+
+### Data Model
+
+```
+App Connection (AgentSession)
+├── id: UUID (immutable, used for tmux session name)
+├── name: String (human-readable, editable)
+├── projectPath: String (folder on server, editable)
+├── agentType: AgentType (opencode/claude/shell)
+├── opencodeSessionId: String? (OpenCode session ID)
+└── opencodeSessionTitle: String? (cached display name)
+
+Relationships:
+- App Connection ←─1:1─→ Tmux Session (permanent, by UUID)
+- App Connection → Folder (configurable)
+- App Connection → OpenCode Session (configurable)
 ```
 
 ## Requirements
@@ -82,9 +127,10 @@ Quick setup:
 sudo dnf install -y tmux  # Fedora
 # sudo apt install -y tmux  # Ubuntu/Debian
 
-# Create the launch script
+# Create the launch script directory
 mkdir -p ~/AgentOS
-# Copy launch-agent.sh from server-dist/
+
+# Copy launch-agent.sh from server-dist/ to ~/AgentOS/
 chmod +x ~/AgentOS/launch-agent.sh
 ```
 
@@ -104,12 +150,19 @@ chmod +x ~/AgentOS/launch-agent.sh
 
 1. Tap the "+" button
 2. Enter a session name
-3. Set the project path on the server
+3. Browse and select a project folder on your server
 4. Choose an agent type:
-   - **OpenCode** - Anthropic's OpenCode CLI
+   - **OpenCode** - OpenCode CLI
    - **Claude** - Claude Code CLI
    - **Shell** - Plain bash shell
-5. Tap Create
+5. For OpenCode: optionally select an existing session to resume
+6. Tap Create
+
+### Managing Sessions
+
+- **Edit**: Tap the edit button on a session to rename, change folder, or switch OpenCode session
+- **Delete**: Swipe left or use edit view to delete
+- **Tmux Admin**: Settings → Tmux Sessions to manage server-side sessions
 
 ## Project Structure
 
@@ -135,24 +188,22 @@ VibeRemote/
 
 ## Development Status
 
-🚧 **Work in Progress** - This is an active development project.
-
 ### Working
-- ✅ SSH connection with Ed25519 key authentication
-- ✅ Terminal display with colors and escape sequences
-- ✅ Session management UI
-- ✅ Server-side launch script
-
-### In Progress
-- 🔄 Keyboard input handling
-- 🔄 Session persistence and reconnection
-- 🔄 tmux integration
+- SSH connection with Ed25519 key authentication
+- Terminal display with colors and escape sequences
+- Keyboard input
+- Folder browser with create folder functionality
+- OpenCode session picker with title refresh
+- Edit session view (rename, change folder, change session, delete)
+- Tmux admin panel (list sessions, kill orphans)
+- Session lifecycle (start, stop, restart)
+- Multiple parallel sessions to same folder
 
 ### Planned
-- 📋 Session snapshots and history
-- 📋 Multiple server support
-- 📋 Keyboard shortcuts and gestures
-- 📋 iPad keyboard support
+- Keyboard toolbar with Ctrl, Esc, Tab buttons
+- OpenCode Server API integration (richer features)
+- Session snapshots and history
+- Multiple server support
 
 ## Known Limitations
 

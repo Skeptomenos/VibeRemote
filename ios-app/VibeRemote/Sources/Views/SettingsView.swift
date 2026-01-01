@@ -52,6 +52,14 @@ struct SettingsView: View {
                     }
                 }
                 
+                Section("Administration") {
+                    NavigationLink {
+                        TmuxAdminView()
+                    } label: {
+                        Label("Tmux Sessions", systemImage: "terminal")
+                    }
+                }
+                
                 Section {
                     Button("Save") {
                         saveConfig()

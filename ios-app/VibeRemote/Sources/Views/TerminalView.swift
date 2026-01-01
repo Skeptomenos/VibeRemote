@@ -7,6 +7,7 @@ private let logger = Logger(subsystem: "com.vibeRemote.app", category: "Terminal
 
 struct TerminalContainerView: View {
     let session: AgentSession
+    let onSessionKilled: () -> Void
     @StateObject private var connectionManager = SSHConnectionManager()
     @Query private var configs: [ServerConfig]
     @State private var terminalSize: (cols: Int, rows: Int) = (80, 24)
@@ -46,8 +47,15 @@ struct TerminalContainerView: View {
                     Button("Restart Agent", systemImage: "arrow.clockwise") {
                         Task { await restartSession() }
                     }
+                    
+                    Divider()
+                    
                     Button("Disconnect", systemImage: "xmark.circle") {
                         Task { await connectionManager.disconnect() }
+                    }
+                    
+                    Button("Kill Session", systemImage: "trash", role: .destructive) {
+                        Task { await killSession() }
                     }
                 } label: {
                     Image(systemName: "ellipsis.circle")
@@ -77,7 +85,9 @@ struct TerminalContainerView: View {
             logger.info("[TerminalView] Connecting...")
             try await connectionManager.connect(config: config, session: session)
             
-            logger.info("[TerminalView] Skipping ensureSession (tmux not installed), attaching directly...")
+            logger.info("[TerminalView] Ensuring session exists...")
+            let result = try await connectionManager.ensureSession(session: session, config: config)
+            logger.info("[TerminalView] ensureSession result: \(result)")
             
             logger.info("[TerminalView] Attaching to PTY with coordinator: \(String(describing: coord))")
             if #available(iOS 18.0, *) {
@@ -118,7 +128,25 @@ struct TerminalContainerView: View {
                 }
             }
         } catch {
-            print("Restart error: \(error)")
+            logger.error("[TerminalView] Restart error: \(error)")
+        }
+    }
+    
+    private func killSession() async {
+        guard let config = serverConfig else { return }
+        do {
+            if connectionManager.connectionState != .connected {
+                try await connectionManager.connect(config: config, session: session)
+            }
+            let result = try await connectionManager.ensureSession(session: session, config: config, action: "stop")
+            logger.info("[TerminalView] Kill session result: \(result)")
+            await connectionManager.disconnect()
+            await MainActor.run {
+                onSessionKilled()
+            }
+        } catch {
+            logger.error("[TerminalView] Kill session error: \(error)")
+            await connectionManager.disconnect()
         }
     }
 }
