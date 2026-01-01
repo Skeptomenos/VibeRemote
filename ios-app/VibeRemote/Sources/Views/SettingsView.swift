@@ -4,6 +4,7 @@ import SwiftData
 struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
+    @Environment(OpenCodeVersionManager.self) private var versionManager
     @Query private var configs: [ServerConfig]
     
     @State private var host = ""
@@ -54,6 +55,26 @@ struct SettingsView: View {
                 
                 Section("Administration") {
                     NavigationLink {
+                        UpdateOpenCodeView()
+                    } label: {
+                        HStack {
+                            Label("Update OpenCode", systemImage: "arrow.down.circle")
+                            Spacer()
+                            if versionManager.isChecking {
+                                ProgressView()
+                            } else if versionManager.isUpdateAvailable {
+                                Text("Update Available")
+                                    .font(.caption)
+                                    .foregroundStyle(.white)
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 4)
+                                    .background(.green)
+                                    .clipShape(Capsule())
+                            }
+                        }
+                    }
+                    
+                    NavigationLink {
                         TmuxAdminView()
                     } label: {
                         Label("Tmux Sessions", systemImage: "terminal")
@@ -80,6 +101,11 @@ struct SettingsView: View {
                     host = config.host
                     port = String(config.port)
                     username = config.username
+                }
+            }
+            .task {
+                if let config = config {
+                    await versionManager.checkVersions(config: config)
                 }
             }
             .sheet(isPresented: $showingKeyGeneration) {

@@ -3,6 +3,8 @@ import SwiftData
 
 @main
 struct VibeRemoteApp: App {
+    @State private var versionManager = OpenCodeVersionManager()
+    
     var sharedModelContainer: ModelContainer = {
         let schema = Schema([
             AgentSession.self,
@@ -21,6 +23,7 @@ struct VibeRemoteApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView()
+                .environment(versionManager)
         }
         .modelContainer(sharedModelContainer)
     }

@@ -128,6 +128,84 @@ class SSHConnectionManager: ObservableObject {
         _ = try await executeCommand("tmux kill-session -t '\(sanitizedName)' 2>/dev/null || true")
     }
     
+    func getOpenCodeVersion() async throws -> String {
+        let output = try await executeCommand("~/.opencode/bin/opencode --version 2>/dev/null || echo 'unknown'")
+        return output.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+    
+    func getLatestOpenCodeVersion() async throws -> String {
+        let command = "curl -s 'https://registry.npmjs.org/opencode-ai/latest' 2>/dev/null | grep -o '\"version\":\"[^\"]*\"' | cut -d'\"' -f4"
+        let output = try await executeCommand(command)
+        let version = output.trimmingCharacters(in: .whitespacesAndNewlines)
+        return version.isEmpty ? "unknown" : version
+    }
+    
+    func listActiveVibeTmuxSessions() async throws -> [String] {
+        let command = "tmux list-sessions -F '#{session_name}' 2>/dev/null | grep '^vibe-' || echo ''"
+        let output = try await executeCommand(command)
+        return output.components(separatedBy: "\n").filter { !$0.isEmpty }
+    }
+    
+    func sendCtrlCToTmuxSession(name: String, timeoutSeconds: Int = 10) async throws -> Bool {
+        let sanitizedName = name.filter { $0.isLetter || $0.isNumber || $0 == "-" || $0 == "_" }
+        
+        _ = try await executeCommand("tmux send-keys -t '\(sanitizedName)' C-c 2>/dev/null || true")
+        
+        for _ in 0..<timeoutSeconds {
+            try await Task.sleep(nanoseconds: 1_000_000_000)
+            
+            let command = "tmux list-panes -t '\(sanitizedName)' -F '#{pane_current_command}' 2>/dev/null || echo 'session_gone'"
+            let currentCommand = try await executeCommand(command)
+            let trimmed = currentCommand.trimmingCharacters(in: .whitespacesAndNewlines)
+            
+            if trimmed != "opencode" {
+                logger.info("OpenCode exited in session \(sanitizedName), current command: \(trimmed)")
+                return true
+            }
+        }
+        
+        logger.warning("Timeout waiting for OpenCode to exit in session \(sanitizedName)")
+        return false
+    }
+    
+    func upgradeOpenCode() async throws -> String {
+        // Robust upgrade process:
+        // 1. Clear corrupted cache
+        // 2. Run upgrade
+        // 3. Fix plugin dependency issue (OpenCode 1.0.223 bug)
+        // 4. Verify installation works
+        let command = """
+            export PATH="$HOME/.opencode/bin:$HOME/.bun/bin:$PATH" && \
+            rm -rf ~/.cache/opencode/node_modules 2>/dev/null; \
+            ~/.opencode/bin/opencode upgrade 2>&1 && \
+            cd ~/.cache/opencode 2>/dev/null && ~/.bun/bin/bun add @opencode-ai/plugin@$(~/.opencode/bin/opencode --version) --exact 2>/dev/null; \
+            ~/.opencode/bin/opencode --version 2>&1 || echo "UPGRADE_VERIFICATION_FAILED"
+            """
+        let output = try await executeCommand(command)
+        
+        if output.contains("UPGRADE_VERIFICATION_FAILED") {
+            throw ConnectionError.upgradeFailed("Verification failed after upgrade")
+        }
+        
+        return output
+    }
+    
+    func restartOpenCodeInTmuxSession(name: String, projectPath: String, opencodeSessionId: String?) async throws {
+        let sanitizedName = name.filter { $0.isLetter || $0.isNumber || $0 == "-" || $0 == "_" }
+        let sanitizedPath = projectPath.replacingOccurrences(of: "'", with: "'\\''")
+        let sanitizedSessionId = (opencodeSessionId ?? "").replacingOccurrences(of: "'", with: "'\\''")
+        
+        let command = "~/AgentOS/launch-agent.sh '\(sanitizedName)' '\(sanitizedPath)' 'opencode' 'restart' '\(sanitizedSessionId)'"
+        _ = try await executeCommand(command)
+    }
+    
+    func getTmuxPaneCommand(sessionName: String) async throws -> String {
+        let sanitizedName = sessionName.filter { $0.isLetter || $0.isNumber || $0 == "-" || $0 == "_" }
+        let command = "tmux list-panes -t '\(sanitizedName)' -F '#{pane_current_command}' 2>/dev/null || echo 'unknown'"
+        let output = try await executeCommand(command)
+        return output.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+    
     func ensureSession(session: AgentSession, config: ServerConfig, action: String = "start") async throws -> String {
         let sanitizedPath = session.projectPath.replacingOccurrences(of: "'", with: "'\\''")
         let opencodeSessionArg = session.opencodeSessionId ?? ""
@@ -218,12 +296,14 @@ enum ConnectionError: LocalizedError {
     case notConfigured
     case notConnected
     case authenticationFailed
+    case upgradeFailed(String)
     
     var errorDescription: String? {
         switch self {
         case .notConfigured: return "Server not configured. Please add your Mac mini details in Settings."
         case .notConnected: return "Not connected to server."
         case .authenticationFailed: return "SSH authentication failed. Check your key configuration."
+        case .upgradeFailed(let reason): return "OpenCode upgrade failed: \(reason)"
         }
     }
 }

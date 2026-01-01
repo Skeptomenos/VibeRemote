@@ -36,6 +36,9 @@ VibeRemote provides a full terminal interface on your iPhone or iPad to interact
 - **Tmux Admin Panel** - View all tmux sessions running on your server
 - **Orphan Detection** - Identify sessions not linked to any app connection
 - **Bulk Cleanup** - Kill individual or all orphaned tmux sessions
+- **OpenCode Updates** - Check for and install OpenCode updates from the app
+- **Version Monitoring** - Shows "Update Available" badge when new version is detected
+- **Robust Upgrade Process** - Clears cache, fixes dependencies, verifies installation
 
 ### Security
 - **Keychain Storage** - SSH keys stored securely in iOS Keychain
@@ -198,6 +201,8 @@ VibeRemote/
 - Tmux admin panel (list sessions, kill orphans)
 - Session lifecycle (start, stop, restart)
 - Multiple parallel sessions to same folder
+- OpenCode version checking and in-app updates
+- Graceful session stop/restart during updates
 
 ### Planned
 - Keyboard toolbar with Ctrl, Esc, Tab buttons
