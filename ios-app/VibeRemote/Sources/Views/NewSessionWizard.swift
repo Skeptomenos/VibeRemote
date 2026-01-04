@@ -1,5 +1,8 @@
 import SwiftUI
 import SwiftData
+import os.log
+
+private let logger = Logger(subsystem: "com.vibeRemote.app", category: "NewSessionWizard")
 
 struct NewSessionWizard: View {
     @Environment(\.dismiss) private var dismiss
@@ -9,6 +12,7 @@ struct NewSessionWizard: View {
     @State private var projectPath = "~/"
     @State private var selectedAgent: AgentType = .opencode
     @State private var selectedOpencodeSession: OpencodeSessionInfo?
+    @State private var selectedConnectionMode: ConnectionMode = .api
     
     @State private var showFolderPicker = false
     @State private var showOpencodeSessionPicker = false
@@ -39,6 +43,27 @@ struct NewSessionWizard: View {
                             showFolderPicker = true
                         }
                         .buttonStyle(.bordered)
+                    }
+                }
+                
+                Section("Connection Mode") {
+                    Picker("Mode", selection: $selectedConnectionMode) {
+                        ForEach(ConnectionMode.allCases, id: \.self) { mode in
+                            Label(mode.displayName, systemImage: mode.iconName)
+                                .tag(mode)
+                        }
+                    }
+                    .pickerStyle(.inline)
+                    .labelsHidden()
+                    
+                    if selectedConnectionMode == .api {
+                        Text("Native chat interface with rich UI. Requires Gateway to be configured in Settings.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        Text("Terminal-based interface via SSH. Works with any agent type.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
                     }
                 }
                 
@@ -144,6 +169,7 @@ struct NewSessionWizard: View {
             name: sessionName.trimmingCharacters(in: .whitespaces),
             projectPath: projectPath.trimmingCharacters(in: .whitespaces),
             agentType: selectedAgent,
+            connectionMode: selectedConnectionMode,
             opencodeSessionId: selectedOpencodeSession?.id,
             opencodeSessionTitle: selectedOpencodeSession?.title
         )
@@ -160,7 +186,7 @@ struct NewSessionWizard: View {
             projectPath = "~/\(sanitizedName)"
             newFolderName = ""
         } catch {
-            print("Create folder error: \(error)")
+            logger.error("Create folder error: \(error.localizedDescription)")
         }
         await connectionManager.disconnect()
     }
@@ -201,6 +227,9 @@ struct FolderPickerView: View {
                             Label(folder, systemImage: "folder.fill")
                         }
                     }
+                    .refreshable {
+                        await loadFolders()
+                    }
                 }
             }
             .navigationTitle("Select Project Folder")
@@ -210,9 +239,22 @@ struct FolderPickerView: View {
                     Button("Cancel") { dismiss() }
                 }
                 ToolbarItem(placement: .primaryAction) {
-                    Button("New Folder", systemImage: "folder.badge.plus") {
-                        dismiss()
-                        onCreateFolder()
+                    HStack {
+                        Button {
+                            Task {
+                                isLoading = true
+                                error = nil
+                                await loadFolders()
+                            }
+                        } label: {
+                            Image(systemName: "arrow.clockwise")
+                        }
+                        .disabled(isLoading)
+                        
+                        Button("New Folder", systemImage: "folder.badge.plus") {
+                            dismiss()
+                            onCreateFolder()
+                        }
                     }
                 }
             }

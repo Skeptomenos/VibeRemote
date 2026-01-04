@@ -1,0 +1,80 @@
+# OpenCode Systemd User Service Template
+# Install to: ~/.config/systemd/user/opencode@.service
+#
+# Usage:
+#   systemctl --user start opencode@ProjectName
+#   systemctl --user enable opencode@ProjectName
+#   systemctl --user status opencode@ProjectName
+#   journalctl --user -u opencode@ProjectName -f
+#
+# Prerequisites:
+#   loginctl enable-linger $USER
+#
+# ============================================================================
+# CRITICAL: API KEYS FOR LLM PROVIDERS
+# ============================================================================
+# When OpenCode runs as a systemd service, it does NOT have access to your
+# shell's environment variables (like GOOGLE_API_KEY from ~/.bashrc).
+#
+# This causes confusing behavior where:
+#   - OpenCode works perfectly when run directly in terminal
+#   - But fails via iOS app/gateway with "unregistered callers" errors
+#
+# SOLUTION: Create an environment file with your API keys:
+#
+#   mkdir -p ~/.config/opencode
+#   cat > ~/.config/opencode/env << 'EOF'
+#   GOOGLE_API_KEY=your-google-api-key
+#   # ANTHROPIC_API_KEY=your-anthropic-key
+#   # OPENAI_API_KEY=your-openai-key
+#   EOF
+#   chmod 600 ~/.config/opencode/env
+#
+# Then restart the service:
+#   systemctl --user daemon-reload
+#   systemctl --user restart opencode@ProjectName
+#
+# See OPENCODE_API_REFERENCE.md "Mistake 7" for full details.
+# ============================================================================
+
+[Unit]
+Description=OpenCode Server for %i
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/linux/%i
+ExecStart=/home/linux/.opencode/bin/opencode serve --port 0 --hostname 127.0.0.1
+Restart=on-failure
+RestartSec=5
+
+# Environment
+Environment=HOME=/home/linux
+Environment=PATH=/home/linux/.local/bin:/home/linux/.bun/bin:/home/linux/.opencode/bin:/usr/local/bin:/usr/bin:/bin
+
+# ============================================================================
+# ENVIRONMENT FILE FOR API KEYS (CRITICAL!)
+# ============================================================================
+# The "-" prefix means: don't fail if file doesn't exist (optional file)
+# But if it exists, all variables in it will be loaded.
+#
+# Without this, providers like 'google' will fail with:
+#   "Method doesn't allow unregistered callers"
+#
+# Create the file with your API keys:
+#   echo "GOOGLE_API_KEY=xxx" > ~/.config/opencode/env
+#   chmod 600 ~/.config/opencode/env
+# ============================================================================
+EnvironmentFile=-/home/linux/.config/opencode/env
+
+# Resource limits - prevent runaway processes
+MemoryMax=2G
+CPUQuota=200%
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=opencode-%i
+
+[Install]
+WantedBy=default.target

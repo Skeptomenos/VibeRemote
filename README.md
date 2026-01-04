@@ -14,11 +14,21 @@ No vendor lock-in. No cloud dependencies. Your server, your keys, your data. Jus
 
 ## Overview
 
-VibeRemote provides a full terminal interface on your iPhone or iPad to interact with AI coding agents running on a remote server. Connect to your development server via SSH, manage multiple agent sessions, and code from anywhere.
+VibeRemote provides a **ChatGPT-like interface** on your iPhone or iPad to interact with AI coding agents (OpenCode) running on a remote server. Features real-time streaming responses, thinking/reasoning display, and tool call visualization.
+
+**New in v2.0**: Full HTTP/SSE gateway architecture replaces SSH terminal for a native chat experience.
 
 ## Features
 
-### Core
+### Core (v2.0 - Chat Interface)
+- **ChatGPT-like Experience** - Native chat UI with streaming responses
+- **Real-time Streaming** - See responses as they're generated via SSE
+- **Thinking/Reasoning Display** - View AI reasoning process for thinking models
+- **Tool Call Visualization** - See Bash, Read, Write operations as expandable cards
+- **Model Picker** - Switch between providers and models mid-conversation
+- **Multiple Providers** - Support for Google, Anthropic, OpenAI, Vertex AI, and more
+
+### Legacy (Terminal Mode)
 - **Native Terminal Experience** - Full terminal emulation using SwiftTerm with colors, escape sequences, and proper rendering
 - **SSH Key Authentication** - Secure Ed25519 key-based authentication (no passwords)
 - **Session Persistence** - Sessions run in tmux on the server, persist across app restarts and network changes
@@ -51,6 +61,26 @@ VibeRemote provides a full terminal interface on your iPhone or iPad to interact
 - **Dark Mode** - Native dark mode support
 
 ## Architecture
+
+### v2.0 - HTTP/SSE Gateway (Recommended)
+
+```
+┌─────────────────┐       HTTPS/SSE      ┌─────────────────┐
+│   iOS Device    │◄────────────────────►│  Linux Server   │
+│                 │                       │                 │
+│  ┌───────────┐  │                       │  ┌───────────┐  │
+│  │  SwiftUI  │  │   Real-time Events    │  │  Gateway  │  │
+│  │  Chat UI  │◄─┼───────────────────────┼─►│ (FastAPI) │  │
+│  └───────────┘  │                       │  └─────┬─────┘  │
+│                 │                       │        │        │
+│  ┌───────────┐  │                       │  ┌─────▼─────┐  │
+│  │URLSession │  │                       │  │ OpenCode  │  │
+│  │  + SSE    │  │                       │  │  Server   │  │
+│  └───────────┘  │                       │  └───────────┘  │
+└─────────────────┘                       └─────────────────┘
+```
+
+### Legacy - SSH Terminal
 
 ```
 ┌─────────────────┐         SSH          ┌─────────────────┐
@@ -191,7 +221,15 @@ VibeRemote/
 
 ## Development Status
 
-### Working
+### ✅ Working (v2.0 - Chat Interface)
+- **Real-time streaming responses** via SSE
+- **Thinking/reasoning display** for thinking models (Gemini 3 Flash, etc.)
+- **Tool call visualization** (Bash, Read, Write operations)
+- **Model picker** with provider/model selection
+- **Session management** (create, resume, switch)
+- **Error handling** with descriptive messages
+
+### Working (Legacy Terminal)
 - SSH connection with Ed25519 key authentication
 - Terminal display with colors and escape sequences
 - Keyboard input
@@ -205,10 +243,10 @@ VibeRemote/
 - Graceful session stop/restart during updates
 
 ### Planned
-- Keyboard toolbar with Ctrl, Esc, Tab buttons
-- OpenCode Server API integration (richer features)
-- Session snapshots and history
+- Improved thinking UI (collapsible sections)
+- Default model selection in session wizard
 - Multiple server support
+- File attachments from iOS
 
 ## Known Limitations
 

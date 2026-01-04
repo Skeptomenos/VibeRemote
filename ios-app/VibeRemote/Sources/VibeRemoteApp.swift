@@ -24,6 +24,8 @@ struct VibeRemoteApp: App {
         WindowGroup {
             ContentView()
                 .environment(versionManager)
+                .preferredColorScheme(.dark)
+                .tint(OpenCodeTheme.primary)
         }
         .modelContainer(sharedModelContainer)
     }

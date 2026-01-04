@@ -1,0 +1,28 @@
+services:
+  viberemote-gateway:
+    build: .
+    container_name: viberemote-gateway
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    ports:
+      - "4000:4000"
+    env_file:
+      - .env
+    environment:
+      - HOME_DIR=/home/linux
+      - XDG_RUNTIME_DIR=/run/user/1000
+      - DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus
+    volumes:
+      - /home/linux:/home/linux:ro
+      - /run/user/1000:/run/user/1000
+      - /var/run/dbus:/var/run/dbus
+    network_mode: host
+    user: "1000:1000"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    labels:
+      - "diun.enable=true"

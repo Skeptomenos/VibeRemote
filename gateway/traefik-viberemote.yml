@@ -1,0 +1,15 @@
+http:
+  routers:
+    viberemote:
+      rule: "Host(`vibecode.helmus.me`)"
+      entryPoints:
+        - websecure
+      service: viberemote
+      tls:
+        certResolver: letsencrypt
+
+  services:
+    viberemote:
+      loadBalancer:
+        servers:
+          - url: "http://172.20.0.1:4000"

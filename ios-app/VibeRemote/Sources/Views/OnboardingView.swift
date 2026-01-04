@@ -9,9 +9,13 @@ struct OnboardingView: View {
     @State private var currentStep = 0
     @State private var host = ""
     @State private var username = ""
+    @State private var password = ""
     @State private var publicKey = ""
     @State private var connectionTested = false
     @State private var testError: String?
+    @State private var keyPushState: AsyncOperationState = .idle
+    @State private var isConnecting = false
+    @State private var keyPushTask: Task<Void, Never>?
     
     private var hasExistingConfig: Bool {
         configs.first?.isConfigured ?? false
@@ -30,9 +34,14 @@ struct OnboardingView: View {
                 )
                 .tag(1)
                 
-                KeyGenerationStep(
+                KeySetupStep(
+                    host: host,
+                    username: username,
+                    password: $password,
                     publicKey: $publicKey,
-                    onGenerate: generateKey,
+                    keyPushState: $keyPushState,
+                    isConnecting: $isConnecting,
+                    onGenerateAndPush: generateAndPushKey,
                     onContinue: { currentStep = 3 }
                 )
                 .tag(2)
@@ -58,13 +67,58 @@ struct OnboardingView: View {
             }
         }
         .interactiveDismissDisabled(!hasExistingConfig)
+        .onDisappear {
+            keyPushTask?.cancel()
+        }
     }
     
-    private func generateKey() {
-        do {
-            publicKey = try KeychainManager.shared.generateKeyPair(label: "viberemote-key")
-        } catch {
-            print("Key generation failed: \(error)")
+    private func generateAndPushKey() {
+        keyPushTask?.cancel()
+        
+        keyPushTask = Task {
+            isConnecting = true
+            keyPushState = .inProgress
+            
+            do {
+                if publicKey.isEmpty {
+                    publicKey = try KeychainManager.shared.generateKeyPair(label: "viberemote-key")
+                }
+                
+                let manager = SSHConnectionManager()
+                try await manager.connectWithPassword(
+                    host: host,
+                    port: 22,
+                    username: username,
+                    password: password
+                )
+                
+                guard !Task.isCancelled else {
+                    await manager.disconnect()
+                    password = "" // Clear password on cancellation
+                    return
+                }
+                
+                try await manager.pushSSHKey(publicKey: publicKey)
+                await manager.disconnect()
+                
+                guard !Task.isCancelled else {
+                    password = "" // Clear password on cancellation
+                    return
+                }
+                
+                keyPushState = .success
+                password = ""
+            } catch {
+                if !Task.isCancelled {
+                    keyPushState = .failed(error.localizedDescription)
+                }
+                // Always clear password on failure for security
+                password = ""
+            }
+            
+            if !Task.isCancelled {
+                isConnecting = false
+            }
         }
     }
     
@@ -170,56 +224,104 @@ struct ServerConfigStep: View {
     }
 }
 
-struct KeyGenerationStep: View {
+struct KeySetupStep: View {
+    let host: String
+    let username: String
+    @Binding var password: String
     @Binding var publicKey: String
-    let onGenerate: () -> Void
+    @Binding var keyPushState: AsyncOperationState
+    @Binding var isConnecting: Bool
+    let onGenerateAndPush: () -> Void
     let onContinue: () -> Void
     
     var body: some View {
         VStack(spacing: 24) {
-            Text("Generate SSH Key")
+            Text("SSH Key Setup")
                 .font(.title2)
                 .fontWeight(.semibold)
             
-            Text("We'll create a secure key pair. Add the public key to your server's ~/.ssh/authorized_keys file.")
+            Text("Enter your server password to automatically set up SSH key authentication.")
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
+                .padding(.horizontal)
             
-            if publicKey.isEmpty {
-                Button(action: onGenerate) {
-                    Label("Generate Key", systemImage: "key.fill")
-                        .frame(maxWidth: .infinity)
+            VStack(spacing: 16) {
+                SecureField("Server Password", text: $password)
+                    .textFieldStyle(.roundedBorder)
+                    .textContentType(.password)
+                
+                switch keyPushState {
+                case .idle:
+                    EmptyView()
+                case .inProgress:
+                    HStack {
+                        ProgressView()
+                        Text("Connecting and setting up key...")
+                            .foregroundStyle(.secondary)
+                    }
+                case .success:
+                    HStack {
+                        Image(systemName: "checkmark.circle.fill")
+                            .foregroundStyle(.green)
+                        Text("SSH key installed successfully!")
+                            .foregroundStyle(.green)
+                    }
+                case .failed(let error):
+                    VStack(spacing: 8) {
+                        HStack {
+                            Image(systemName: "xmark.circle.fill")
+                                .foregroundStyle(.red)
+                            Text("Setup failed")
+                                .foregroundStyle(.red)
+                        }
+                        Text(error)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center)
+                    }
                 }
-                .buttonStyle(.bordered)
-                .controlSize(.large)
-                .padding(.horizontal, 40)
-            } else {
-                VStack(spacing: 12) {
+            }
+            .padding(.horizontal, 40)
+            
+            if !publicKey.isEmpty {
+                VStack(spacing: 8) {
+                    Text("Public Key:")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                     Text(publicKey)
-                        .font(.system(.caption, design: .monospaced))
-                        .padding()
+                        .font(.system(.caption2, design: .monospaced))
+                        .padding(8)
                         .background(Color(.systemGray6))
                         .cornerRadius(8)
                         .textSelection(.enabled)
-                    
-                    Button("Copy to Clipboard") {
-                        UIPasteboard.general.string = publicKey
-                    }
-                    .buttonStyle(.bordered)
                 }
                 .padding(.horizontal, 20)
             }
             
             Spacer()
             
-            Button(action: onContinue) {
-                Text("I've Added the Key")
-                    .frame(maxWidth: .infinity)
+            VStack(spacing: 12) {
+                if case .success = keyPushState {
+                    Button(action: onContinue) {
+                        Text("Continue")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
+                } else {
+                    Button(action: onGenerateAndPush) {
+                        Label(
+                            publicKey.isEmpty ? "Generate Key & Connect" : "Connect & Install Key",
+                            systemImage: "key.fill"
+                        )
+                        .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
+                    .disabled(password.isEmpty || isConnecting)
+                }
             }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.large)
             .padding(.horizontal, 40)
-            .disabled(publicKey.isEmpty)
         }
         .padding()
     }

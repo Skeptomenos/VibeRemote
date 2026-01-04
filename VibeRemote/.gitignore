@@ -1,0 +1,7 @@
+.build/
+.swiftpm/
+*.xcuserstate
+DerivedData/
+.DS_Store
+node_modules/
+design-os/

@@ -1,7 +1,10 @@
 import SwiftUI
 import SwiftData
+import os.log
 
 struct EditSessionView: View {
+    private let logger = Logger(subsystem: "com.vibeRemote.app", category: "EditSessionView")
+    
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
     @Query private var configs: [ServerConfig]
@@ -12,6 +15,10 @@ struct EditSessionView: View {
     @State private var projectPath: String
     @State private var selectedAgent: AgentType
     @State private var selectedOpencodeSession: OpencodeSessionInfo?
+    @State private var selectedDefaultProvider: String?
+    @State private var selectedDefaultModel: String?
+    @State private var availableProviders: [Provider] = []
+    @State private var isLoadingProviders = false
     
     init(session: AgentSession, onDelete: @escaping () -> Void) {
         self._session = Bindable(wrappedValue: session)
@@ -19,6 +26,8 @@ struct EditSessionView: View {
         self._sessionName = State(initialValue: session.name)
         self._projectPath = State(initialValue: session.projectPath)
         self._selectedAgent = State(initialValue: session.agentType)
+        self._selectedDefaultProvider = State(initialValue: session.defaultProviderID)
+        self._selectedDefaultModel = State(initialValue: session.defaultModelID)
         if let id = session.opencodeSessionId, let title = session.opencodeSessionTitle {
             self._selectedOpencodeSession = State(initialValue: OpencodeSessionInfo(id: id, title: title, updated: session.lastActive))
         } else {
@@ -92,6 +101,43 @@ struct EditSessionView: View {
                                 showOpencodeSessionPicker = true
                             }
                             .buttonStyle(.bordered)
+                        }
+                    }
+                    
+                    Section("Default Model") {
+                        if isLoadingProviders {
+                            HStack {
+                                ProgressView()
+                                    .controlSize(.small)
+                                Text("Loading models...")
+                                    .foregroundStyle(.secondary)
+                            }
+                        } else if availableProviders.isEmpty {
+                            Button("Load Available Models") {
+                                Task { await loadProviders() }
+                            }
+                        } else {
+                            Picker("Provider", selection: $selectedDefaultProvider) {
+                                Text("Use API Default").tag(nil as String?)
+                                ForEach(availableProviders, id: \.id) { provider in
+                                    Text(provider.name).tag(provider.id as String?)
+                                }
+                            }
+                            
+                            if let providerId = selectedDefaultProvider,
+                               let provider = availableProviders.first(where: { $0.id == providerId }) {
+                                Picker("Model", selection: $selectedDefaultModel) {
+                                    ForEach(provider.models, id: \.id) { model in
+                                        Text(model.name).tag(model.id as String?)
+                                    }
+                                }
+                            }
+                            
+                            if selectedDefaultProvider != nil && selectedDefaultModel != nil {
+                                Text("Session will start with this model selected")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
                         }
                     }
                 }
@@ -199,7 +245,32 @@ struct EditSessionView: View {
         sessionName != session.name ||
         projectPath != session.projectPath ||
         selectedAgent != session.agentType ||
-        selectedOpencodeSession?.id != session.opencodeSessionId
+        selectedOpencodeSession?.id != session.opencodeSessionId ||
+        selectedDefaultProvider != session.defaultProviderID ||
+        selectedDefaultModel != session.defaultModelID
+    }
+    
+    private func loadProviders() async {
+        guard let config = serverConfig,
+              let url = URL(string: config.apiURL),
+              let apiKey = KeychainManager.shared.getAPIKey() else { return }
+        
+        isLoadingProviders = true
+        defer { isLoadingProviders = false }
+        
+        do {
+            let apiURL = url.appendingPathComponent("projects/\(session.projectName)/api")
+            let client = OpenCodeClient(baseURL: apiURL, apiKey: apiKey)
+            let response = try await client.getProviders()
+            availableProviders = response.providers
+            
+            if selectedDefaultProvider == nil, let defaults = response.default {
+                selectedDefaultProvider = defaults["provider"]
+                selectedDefaultModel = defaults["model"]
+            }
+        } catch {
+            logger.error("Failed to load providers: \(error.localizedDescription)")
+        }
     }
     
     private func saveChanges() {
@@ -210,6 +281,8 @@ struct EditSessionView: View {
         session.agentType = selectedAgent
         session.opencodeSessionId = selectedOpencodeSession?.id
         session.opencodeSessionTitle = selectedOpencodeSession?.title
+        session.defaultProviderID = selectedDefaultProvider
+        session.defaultModelID = selectedDefaultModel
         session.lastActive = Date()
         
         if sessionChanged, let config = serverConfig {

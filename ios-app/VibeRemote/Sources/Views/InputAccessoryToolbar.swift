@@ -14,8 +14,9 @@ struct InputAccessoryToolbar: View {
                     Text(key.label)
                         .font(.system(.caption, design: .monospaced))
                         .fontWeight(.medium)
+                        .foregroundStyle(OpenCodeTheme.text)
                         .frame(minWidth: 44, minHeight: 36)
-                        .background(Color(.systemGray5))
+                        .background(OpenCodeTheme.backgroundElement)
                         .cornerRadius(6)
                 }
                 .buttonStyle(.plain)
@@ -24,7 +25,7 @@ struct InputAccessoryToolbar: View {
         }
         .padding(.horizontal)
         .padding(.vertical, 8)
-        .background(.ultraThinMaterial)
+        .background(OpenCodeTheme.backgroundPanel)
     }
 }
 

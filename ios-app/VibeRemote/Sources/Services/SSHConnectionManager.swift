@@ -67,6 +67,71 @@ class SSHConnectionManager: ObservableObject {
         }
     }
     
+    func connectWithPassword(host: String, port: Int, username: String, password: String) async throws {
+        connectionState = .connecting
+        lastError = nil
+        
+        do {
+            logger.info("Connecting with password to \(host):\(port) as \(username)")
+            
+            sshClient = try await SSHClient.connect(
+                host: host,
+                port: port,
+                authenticationMethod: .passwordBased(username: username, password: password),
+                hostKeyValidator: .acceptAnything(),
+                reconnect: .never,
+                algorithms: .all
+            )
+            
+            logger.info("Password auth connected successfully!")
+            connectionState = .connected
+        } catch let error as SSHClientError where error == .allAuthenticationOptionsFailed {
+            let errorMsg = "Authentication failed. Please check your password is correct."
+            logger.error("\(errorMsg)")
+            connectionState = .error
+            lastError = errorMsg
+            throw error
+        } catch {
+            let errorMsg = "Connection failed: \(error)"
+            logger.error("\(errorMsg)")
+            connectionState = .error
+            lastError = errorMsg
+            throw error
+        }
+    }
+    
+    func pushSSHKey(publicKey: String) async throws {
+        guard sshClient != nil else {
+            throw ConnectionError.notConnected
+        }
+        
+        logger.info("Pushing SSH key to server...")
+        
+        let escapedKey = publicKey.replacingOccurrences(of: "'", with: "'\\''")
+        
+        let setupCommand = """
+        mkdir -p ~/.ssh && chmod 700 ~/.ssh && \
+        touch ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys && \
+        if ! grep -qF '\(escapedKey)' ~/.ssh/authorized_keys 2>/dev/null; then \
+            echo '\(escapedKey)' >> ~/.ssh/authorized_keys && echo 'KEY_ADDED'; \
+        else \
+            echo 'KEY_EXISTS'; \
+        fi
+        """
+        
+        let result = try await executeCommand(setupCommand)
+        let trimmedResult = result.trimmingCharacters(in: .whitespacesAndNewlines)
+        
+        if trimmedResult.contains("KEY_ADDED") {
+            logger.info("SSH key successfully added to server")
+        } else if trimmedResult.contains("KEY_EXISTS") {
+            logger.info("SSH key already exists on server")
+        } else {
+            logger.error("Key push failed with unexpected result: \(trimmedResult)")
+            throw ConnectionError.commandFailed("Failed to install SSH key: \(trimmedResult)")
+        }
+    }
+    
     func executeCommand(_ command: String) async throws -> String {
         guard let client = sshClient else {
             throw ConnectionError.notConnected
@@ -76,8 +141,18 @@ class SSHConnectionManager: ObservableObject {
     }
     
     func listDirectories(path: String = "~/") async throws -> [String] {
-        let sanitizedPath = path.replacingOccurrences(of: "'", with: "'\\''")
-        let command = "ls -1d '\(sanitizedPath)'*/ 2>/dev/null | xargs -n1 basename"
+        // Expand ~ to $HOME since single quotes don't expand tilde
+        let expandedPath: String
+        if path.hasPrefix("~/") {
+            expandedPath = "$HOME/" + path.dropFirst(2)
+        } else if path == "~" {
+            expandedPath = "$HOME"
+        } else {
+            expandedPath = path
+        }
+        // Use double quotes to allow $HOME expansion, escape any existing double quotes
+        let sanitizedPath = expandedPath.replacingOccurrences(of: "\"", with: "\\\"")
+        let command = "ls -1d \"\(sanitizedPath)\"*/ 2>/dev/null | xargs -n1 basename"
         let output = try await executeCommand(command)
         return output.components(separatedBy: "\n").filter { !$0.isEmpty }
     }
@@ -297,6 +372,7 @@ enum ConnectionError: LocalizedError {
     case notConnected
     case authenticationFailed
     case upgradeFailed(String)
+    case commandFailed(String)
     
     var errorDescription: String? {
         switch self {
@@ -304,6 +380,7 @@ enum ConnectionError: LocalizedError {
         case .notConnected: return "Not connected to server."
         case .authenticationFailed: return "SSH authentication failed. Check your key configuration."
         case .upgradeFailed(let reason): return "OpenCode upgrade failed: \(reason)"
+        case .commandFailed(let reason): return reason
         }
     }
 }

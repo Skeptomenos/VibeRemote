@@ -49,27 +49,47 @@ struct SessionRowView: View {
     
     var body: some View {
         HStack(spacing: 12) {
-            Image(systemName: session.agentType.iconName)
-                .foregroundStyle(.secondary)
+            Image(systemName: session.connectionIcon)
+                .foregroundStyle(connectionModeColor)
                 .frame(width: 24)
             
             VStack(alignment: .leading, spacing: 2) {
-                Text(session.name)
-                    .font(.body)
-                    .fontWeight(.medium)
+                HStack(spacing: 6) {
+                    Text(session.name)
+                        .font(.body)
+                        .fontWeight(.medium)
+                        .foregroundStyle(OpenCodeTheme.text)
+                    
+                    Text(session.agentType.displayName)
+                        .font(.caption2)
+                        .foregroundStyle(OpenCodeTheme.textMuted)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(OpenCodeTheme.backgroundElement)
+                        .cornerRadius(4)
+                }
                 
                 Text(session.projectPath)
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(OpenCodeTheme.textMuted)
                     .lineLimit(1)
             }
             
             Spacer()
             
             Circle()
-                .fill(.green)
+                .fill(OpenCodeTheme.success)
                 .frame(width: 8, height: 8)
         }
         .padding(.vertical, 4)
+    }
+    
+    private var connectionModeColor: Color {
+        switch session.connectionMode {
+        case .api:
+            return OpenCodeTheme.primary
+        case .ssh:
+            return OpenCodeTheme.textMuted
+        }
     }
 }

@@ -103,6 +103,65 @@ class KeychainManager {
             throw KeychainError.unableToDelete
         }
     }
+    
+    private static let apiKeyService = "com.viberemote.apikey"
+    private static let apiKeyAccount = "gateway-api-key"
+    
+    func storeAPIKey(_ key: String) throws {
+        guard let keyData = key.data(using: .utf8) else {
+            throw KeychainError.unableToStore
+        }
+        
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrAccount as String: Self.apiKeyAccount,
+            kSecAttrService as String: Self.apiKeyService,
+            kSecValueData as String: keyData,
+            kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly
+        ]
+        
+        SecItemDelete(query as CFDictionary)
+        
+        let status = SecItemAdd(query as CFDictionary, nil)
+        guard status == errSecSuccess else {
+            throw KeychainError.unableToStore
+        }
+    }
+    
+    func getAPIKey() -> String? {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrAccount as String: Self.apiKeyAccount,
+            kSecAttrService as String: Self.apiKeyService,
+            kSecReturnData as String: true
+        ]
+        
+        var result: AnyObject?
+        let status = SecItemCopyMatching(query as CFDictionary, &result)
+        
+        guard status == errSecSuccess, let data = result as? Data else {
+            return nil
+        }
+        
+        return String(data: data, encoding: .utf8)
+    }
+    
+    func hasAPIKey() -> Bool {
+        getAPIKey() != nil
+    }
+    
+    func deleteAPIKey() throws {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrAccount as String: Self.apiKeyAccount,
+            kSecAttrService as String: Self.apiKeyService
+        ]
+        
+        let status = SecItemDelete(query as CFDictionary)
+        guard status == errSecSuccess || status == errSecItemNotFound else {
+            throw KeychainError.unableToDelete
+        }
+    }
 }
 
 enum KeychainError: LocalizedError {
