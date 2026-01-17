@@ -28,7 +28,7 @@ actor OpenCodeClient {
     }
     
     func healthCheck() async throws -> Bool {
-        let url = baseURL.appendingPathComponent("global/health")
+        let url = baseURL.appendingPathComponent("health")
         let request = authorizedRequest(for: url)
         let (_, response) = try await session.data(for: request)
         return (response as? HTTPURLResponse)?.statusCode == 200
@@ -347,12 +347,13 @@ actor OpenCodeClient {
                 }
             case "message.part.updated":
                 let messageID = wrapper.properties?.partMessageID ?? ""
+                let sessionID = wrapper.properties?.partSessionID
                 let part = wrapper.properties?.part ?? .unknown
                 if messageID.isEmpty {
                     print("[SSE WARN] message.part.updated with empty messageID, raw: \(String(json.prefix(300)))")
                 }
-                print("[SSE PART] message.part.updated for \(messageID), part type: \(String(describing: part))")
-                return .partUpdated(messageID, part)
+                print("[SSE PART] message.part.updated for \(messageID), sessionID=\(sessionID ?? "nil"), part type: \(String(describing: part))")
+                return .partUpdated(messageID: messageID, sessionID: sessionID, part: part)
             case "session.updated":
                 if let session = wrapper.properties?.sessionInfo {
                     logger.info("SSE: session.updated for session \(session.id)")
@@ -496,12 +497,14 @@ private struct SSEEventProperties: Decodable {
         partWrapper?.toMessagePart()
     }
     
-    /// The messageID from the nested "part" object (for message.part.updated events)
     var partMessageID: String? {
         partWrapper?.messageID
     }
     
-    /// The error message from the nested "error" object (for session.error events)
+    var partSessionID: String? {
+        partWrapper?.sessionID
+    }
+    
     var errorMessage: String? {
         errorWrapper?.errorMessage
     }

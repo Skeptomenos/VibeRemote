@@ -4,19 +4,29 @@ struct ChatContainerView: View {
     let session: AgentSession
     let gatewayURL: URL
     let apiKey: String
+    var onMenuTap: (() -> Void)?
     
     @StateObject private var viewModel: ChatViewModel
     @State private var showStatusPanel = false
     @State private var showModelPicker = false
+    @State private var showSaveSessionAlert = false
     
-    init(session: AgentSession, gatewayURL: URL, apiKey: String) {
+    init(
+        session: AgentSession,
+        gatewayURL: URL,
+        apiKey: String,
+        initialMessage: String? = nil,
+        onMenuTap: (() -> Void)? = nil
+    ) {
         self.session = session
         self.gatewayURL = gatewayURL
         self.apiKey = apiKey
+        self.onMenuTap = onMenuTap
         self._viewModel = StateObject(wrappedValue: ChatViewModel(
             session: session,
             gatewayURL: gatewayURL,
-            apiKey: apiKey
+            apiKey: apiKey,
+            initialMessage: initialMessage
         ))
     }
     
@@ -28,6 +38,10 @@ struct ChatContainerView: View {
                 
                 VStack(spacing: 0) {
                     chatHeader
+                    
+                    if session.isTemporary {
+                        TemporarySessionBanner(onSave: { showSaveSessionAlert = true })
+                    }
                     
                     if viewModel.messages.isEmpty && !viewModel.isLoading {
                         emptyState
@@ -63,19 +77,30 @@ struct ChatContainerView: View {
         .sheet(isPresented: $showModelPicker) {
             ModelPickerSheet(viewModel: viewModel)
         }
+        .alert("Save Session", isPresented: $showSaveSessionAlert) {
+            Button("Save") {
+                session.sessionType = .saved
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This will save the session permanently. You can find it in your session list.")
+        }
     }
     
     private var chatHeader: some View {
         HStack {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(session.name)
-                    .font(VibeTheme.Typography.bodySemibold)
-                    .foregroundStyle(VibeTheme.Colors.fg)
-                
-                Text(session.projectName)
-                    .font(VibeTheme.Typography.caption)
-                    .foregroundStyle(VibeTheme.Colors.fgSecondary)
+            if let onMenuTap = onMenuTap {
+                Button(action: onMenuTap) {
+                    Image(systemName: "line.3.horizontal")
+                        .font(.system(size: 20, weight: .medium))
+                        .foregroundStyle(VibeTheme.Colors.fgSecondary)
+                        .frame(width: 44, height: 44)
+                }
             }
+            
+            Text(session.name)
+                .font(VibeTheme.Typography.bodySemibold)
+                .foregroundStyle(VibeTheme.Colors.fg)
             
             Spacer()
             

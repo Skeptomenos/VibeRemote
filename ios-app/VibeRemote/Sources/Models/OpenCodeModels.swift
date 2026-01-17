@@ -203,6 +203,40 @@ struct MessageInfo: Codable {
     let error: MessageError?
     let summary: MessageSummary?
     
+    init(
+        id: String,
+        sessionID: String,
+        role: MessageRole,
+        time: MessageTime,
+        model: MessageModel? = nil,
+        cost: Double? = nil,
+        tokens: TokenUsage? = nil,
+        agent: String? = nil,
+        parentID: String? = nil,
+        modelID: String? = nil,
+        providerID: String? = nil,
+        mode: String? = nil,
+        path: MessagePath? = nil,
+        error: MessageError? = nil,
+        summary: MessageSummary? = nil
+    ) {
+        self.id = id
+        self.sessionID = sessionID
+        self.role = role
+        self.time = time
+        self.model = model
+        self.cost = cost
+        self.tokens = tokens
+        self.agent = agent
+        self.parentID = parentID
+        self.modelID = modelID
+        self.providerID = providerID
+        self.mode = mode
+        self.path = path
+        self.error = error
+        self.summary = summary
+    }
+    
     var effectiveModelID: String? { model?.modelID ?? modelID }
     var effectiveProviderID: String? { model?.providerID ?? providerID }
 }
@@ -640,7 +674,7 @@ struct Agent: Codable, Identifiable {
 
 enum ServerEvent {
     case messageUpdated(OpenCodeMessage)
-    case partUpdated(String, MessagePart)
+    case partUpdated(messageID: String, sessionID: String?, part: MessagePart)
     case sessionUpdated(OpenCodeSession)
     case messageRemoved(String)
     case lspDiagnostics([Diagnostic])

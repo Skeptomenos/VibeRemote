@@ -32,7 +32,15 @@ class ChatViewModel: ObservableObject {
     
     @Published var messages: [OpenCodeMessage] = []
     @Published var inputText: String = ""
-    @Published var isLoading: Bool = false
+    @Published var isLoading: Bool = false {
+        didSet {
+            if isLoading {
+                SessionCleanupManager.shared.markSessionActive(session.id)
+            } else {
+                SessionCleanupManager.shared.markSessionIdle(session.id)
+            }
+        }
+    }
     @Published var connectionState: ConnectionState = .disconnected
     
     @Published var providers: [Provider] = []
@@ -56,13 +64,15 @@ class ChatViewModel: ObservableObject {
     private var openCodeClient: OpenCodeClient?
     private var eventTask: Task<Void, Never>?
     private var openCodeSessionId: String?
+    private var initialMessage: String?
     
     // MARK: - Initialization
     
-    init(session: AgentSession, gatewayURL: URL, apiKey: String) {
+    init(session: AgentSession, gatewayURL: URL, apiKey: String, initialMessage: String? = nil) {
         self.session = session
         self.gatewayURL = gatewayURL
         self.apiKey = apiKey
+        self.initialMessage = initialMessage
     }
     
     deinit {
@@ -149,6 +159,13 @@ class ChatViewModel: ObservableObject {
             
             connectionState = .connected
             print("[ChatVM] Connected to OpenCode session: \(self.openCodeSessionId ?? "unknown")")
+            
+            // Send initial message if present
+            if let message = initialMessage {
+                inputText = message
+                initialMessage = nil // Clear so it's not sent again on reconnect
+                await sendMessage()
+            }
             
         } catch {
             logger.error("Connection failed: \(error.localizedDescription)")
@@ -343,6 +360,11 @@ class ChatViewModel: ObservableObject {
     private func handleEvent(_ event: ServerEvent) async {
         switch event {
         case .messageUpdated(let message):
+            // Filter: Only process events for THIS session
+            guard message.info.sessionID == openCodeSessionId else {
+                logger.info("SSE: message.updated - IGNORED (sessionID mismatch: \(message.info.sessionID) != \(self.openCodeSessionId ?? "nil"))")
+                return
+            }
             logger.info("SSE: message.updated - id=\(message.id), role=\(message.info.role.rawValue)")
             
             if let index = self.messages.firstIndex(where: { $0.id == message.id }) {
@@ -364,7 +386,12 @@ class ChatViewModel: ObservableObject {
                 self.isLoading = false
             }
             
-        case .partUpdated(let messageId, let part):
+        case .partUpdated(let messageId, let sessionId, let part):
+            // Filter: Only process events for THIS session
+            if let sessionId = sessionId, sessionId != openCodeSessionId {
+                logger.info("SSE: part.updated - IGNORED (sessionID mismatch: \(sessionId) != \(self.openCodeSessionId ?? "nil"))")
+                return
+            }
             logger.info("SSE: part.updated - messageId=\(messageId)")
             
             if messageId.isEmpty {

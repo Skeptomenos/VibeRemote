@@ -25,6 +25,15 @@ final class ServerConfig {
         self.apiURL = apiURL
     }
     
+    init(gatewayURL: URL) {
+        self.id = UUID()
+        self.host = ""
+        self.port = 22
+        self.username = ""
+        self.sshKeyLabel = "viberemote-key"
+        self.apiURL = gatewayURL.absoluteString
+    }
+    
     var isConfigured: Bool {
         !host.isEmpty && !username.isEmpty
     }

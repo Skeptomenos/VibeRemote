@@ -8,18 +8,28 @@ final class AgentSession {
     var projectPath: String
     var agentType: AgentType
     var lastActive: Date
-    var isPinned: Bool
+    var createdAt: Date = Date()
+    var isFavorite: Bool = false
+    var isMasterFavorite: Bool = false
+    var sessionTypeRaw: String = "saved"
     var opencodeSessionId: String?
     var opencodeSessionTitle: String?
     var connectionModeRaw: String = "api"
     var defaultProviderID: String?
     var defaultModelID: String?
     
+    @available(*, deprecated, renamed: "isFavorite")
+    var isPinned: Bool {
+        get { isFavorite }
+        set { isFavorite = newValue }
+    }
+    
     init(
         name: String,
         projectPath: String,
         agentType: AgentType = .opencode,
         connectionMode: ConnectionMode = .api,
+        sessionType: SessionType = .saved,
         opencodeSessionId: String? = nil,
         opencodeSessionTitle: String? = nil,
         defaultProviderID: String? = nil,
@@ -30,8 +40,11 @@ final class AgentSession {
         self.projectPath = projectPath
         self.agentType = agentType
         self.connectionModeRaw = connectionMode.rawValue
+        self.sessionTypeRaw = sessionType.rawValue
         self.lastActive = Date()
-        self.isPinned = false
+        self.createdAt = Date()
+        self.isFavorite = false
+        self.isMasterFavorite = false
         self.opencodeSessionId = opencodeSessionId
         self.opencodeSessionTitle = opencodeSessionTitle
         self.defaultProviderID = defaultProviderID
@@ -41,6 +54,15 @@ final class AgentSession {
     var connectionMode: ConnectionMode {
         get { ConnectionMode(rawValue: connectionModeRaw) ?? .api }
         set { connectionModeRaw = newValue.rawValue }
+    }
+    
+    var sessionType: SessionType {
+        get { SessionType(rawValue: sessionTypeRaw) ?? .saved }
+        set { sessionTypeRaw = newValue.rawValue }
+    }
+    
+    var isTemporary: Bool {
+        sessionType == .temporary
     }
     
     var tmuxSessionName: String {
@@ -54,6 +76,11 @@ final class AgentSession {
     var connectionIcon: String {
         connectionMode.iconName
     }
+}
+
+enum SessionType: String, Codable, CaseIterable {
+    case temporary
+    case saved
 }
 
 enum AgentType: String, Codable, CaseIterable {

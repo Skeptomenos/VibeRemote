@@ -9,7 +9,8 @@ struct VibeRemoteApp: App {
         let schema = Schema([
             AgentSession.self,
             ServerConfig.self,
-            SessionSnapshot.self
+            SessionSnapshot.self,
+            UserPreferences.self
         ])
         let modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
         
@@ -26,6 +27,9 @@ struct VibeRemoteApp: App {
                 .environment(versionManager)
                 .preferredColorScheme(.dark)
                 .tint(OpenCodeTheme.primary)
+                .task {
+                    SessionCleanupManager.shared.configure(with: sharedModelContainer.mainContext)
+                }
         }
         .modelContainer(sharedModelContainer)
     }
